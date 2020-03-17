@@ -1,5 +1,5 @@
 /****************************
-description:loadlibrary from dll file
+description:load dll file
 date:2019/3/17
 version:0.0.0
 --tkyzp
@@ -13,60 +13,63 @@ version:0.0.0
 #include<stdlib.h>
 #include<Windows.h>
 #include<winnt.h>
-int isPEfile(FILE* hfile);
-int isDLLfile(FILE* hfile);
+int isPEfile(HANDLE hfile);
+int isDLLfile(HANDLE hfile);
 int main(int argc, char* argv[]) {
-	FILE* hfile = NULL;
-	fopen_s(&hfile, "D:\\Assignment\\SoftwareSecurity\\第四次作业\\dDisk.dll", "r");
-	
-	if (hfile == NULL) {
+	//打开文件句柄
+	HANDLE fhandle = CreateFile(L"D:\\Assignment\\SoftwareSecurity\\第四次作业\\dDisk.dll",
+		GENERIC_READ,
+		FILE_SHARE_READ,
+		NULL,
+		OPEN_EXISTING,
+		FILE_FLAG_OVERLAPPED,
+		NULL);
+	if (fhandle == INVALID_HANDLE_VALUE) {
 		printf("open file error:%d", GetLastError());
-		fclose(hfile);
 		return 1;
 	}
-	int i = isDLLfile(hfile);
-	fseek(hfile, 0, SEEK_END);
-	int filesize = ftell(hfile);
-	if (filesize <= 0) {
-		fclose(hfile);
+	//检查是否dll
+	if (!isDLLfile(fhandle)) {
+		printf("不是有效的dll文件");
 		return 2;
 	}
-
-
-	fclose(hfile);
+	//开始工作
+	CloseHandle(fhandle);
 	return 0;
 }
 //判断是否PE文件
-int isPEfile(FILE* hfile)
+int isPEfile(HANDLE hfile)
 {
+	OVERLAPPED over = { 0 };
+	DWORD readsize = 0;
 	//检查MZ头
-	fseek(hfile, 0, SEEK_SET);
 	char mz[2] = { 0 };
-	fread(mz, 1, 2, hfile);
+	ReadFile(hfile, mz, 2, &readsize, &over);
 	if (mz[0] != 'M' || mz[1] != 'Z') return 0;
 	//检查PE头
-	DWORD peaddr;
+	DWORD peaddr = 0;
 	char pe[4] = { 0 };
-	fseek(hfile, 0x3c, SEEK_SET);
-	fread(&peaddr, 4, 1, hfile);
-	fseek(hfile, (long)peaddr, SEEK_SET);
-	fread(pe, 1, 4, hfile);
+	over.Offset = 0x3c;
+	ReadFile(hfile, &peaddr, 4, &readsize, &over);
+	over.Offset = peaddr;
+	ReadFile(hfile, pe, 4, &readsize, &over);
 	if (pe[0] == 'P' && pe[1] == 'E' && pe[2] == '\0' && pe[3] == '\0') return 1;
 	return 0;
 }
 //判断是否DLL文件
-int isDLLfile(FILE* hfile)
+int isDLLfile(HANDLE hfile)
 {
 	//判断是否PE文件
 	if (!isPEfile(hfile)) return 0;
 	//读取PE文件头
-	DWORD peaddr;
-	char pe[4] = { 0 };
-	fseek(hfile, 0x3c, SEEK_SET);
-	fread(&peaddr, 4, 1, hfile);
+	OVERLAPPED over = { 0 };
+	DWORD readsize = 0;
+	DWORD peaddr = 0;
 	IMAGE_NT_HEADERS ntheader;
-	fseek(hfile, (long)peaddr, SEEK_SET);
-	fread(&ntheader, sizeof(IMAGE_NT_HEADERS), 1, hfile);
+	over.Offset = 0x3c;
+	ReadFile(hfile, &peaddr, 4, &readsize, &over);
+	over.Offset = peaddr;
+	ReadFile(hfile, &ntheader, sizeof(IMAGE_NT_HEADERS), &readsize, &over);
 	if (ntheader.FileHeader.Characteristics & IMAGE_FILE_DLL) return 1;
 	return 0;
 }
